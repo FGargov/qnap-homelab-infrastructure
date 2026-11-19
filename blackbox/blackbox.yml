@@ -1,0 +1,22 @@
+modules:
+  nextcloud_status:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      follow_redirects: false
+      fail_if_body_json_not_matches_cel: >-
+        body.installed == true &&
+        body.maintenance == false &&
+        body.needsDbUpgrade == false
+
+  onlyoffice_health:
+    prober: http
+    timeout: 5s
+    http:
+      preferred_ip_protocol: ip4
+      valid_status_codes: [200]
+      follow_redirects: false
+      fail_if_body_not_matches_regexp:
+        - '^\s*true\s*$'
