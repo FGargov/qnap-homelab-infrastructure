@@ -1,0 +1,14 @@
+services:
+  grafana:
+    environment:
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST: "${GF_SMTP_HOST:-smtp.gmail.com:465}"
+      GF_SMTP_USER: "${GF_SMTP_USER:?Set GF_SMTP_USER in the local SMTP env file}"
+      GF_SMTP_PASSWORD: "${GF_SMTP_PASSWORD:?Set GF_SMTP_PASSWORD in the local SMTP env file}"
+      GF_SMTP_FROM_ADDRESS: "${GF_SMTP_FROM_ADDRESS:?Set GF_SMTP_FROM_ADDRESS in the local SMTP env file}"
+      GF_SMTP_FROM_NAME: "${GF_SMTP_FROM_NAME:-QNAP Grafana}"
+      QNAP_ALERT_EMAIL: "${QNAP_ALERT_EMAIL:?Set QNAP_ALERT_EMAIL in the local SMTP env file}"
+    volumes:
+      - ../grafana/dashboards:/etc/grafana/qnap-dashboards:ro,z
+      - ../grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro,z
+      - ../grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro,z
