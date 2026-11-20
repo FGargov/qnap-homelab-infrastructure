@@ -1,0 +1,141 @@
+diff --git a/README.md b/README.md
+index 5fe4db0..af602dd 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,7 @@
+ 
+ - [Disaster recovery guide](docs/disaster-recovery.md) — Nextcloud and MariaDB restore procedure and verification results.
+ - [Monitoring guide](docs/monitoring.md) — Docker Compose setup, Grafana provisioning, SMTP settings, and validation on a separate instance.
++- [Monitoring runbook](docs/monitoring-runbook.md) — Architecture, local reviewer demo, troubleshooting, and verification evidence.
+ 
+ ## Next step
+ 
+diff --git a/docs/monitoring-runbook.md b/docs/monitoring-runbook.md
+new file mode 100644
+index 0000000..5cbeb06
+--- /dev/null
++++ b/docs/monitoring-runbook.md
+@@ -0,0 +1,123 @@
++# QNAP monitoring runbook
++
++This runbook covers the monitoring stack on the Rocky Linux VM and a local demo for reviewers. For initial deployment and SMTP configuration, use the [monitoring setup guide](monitoring.md). For restoration procedures, use the [disaster recovery guide](disaster-recovery.md).
++
++## Architecture
++
++```mermaid
++flowchart TD
++    G["Grafana on Rocky Linux VM"] -->|Queries metrics| P["Prometheus"]
++    P -->|Scrapes probe results| B["Blackbox Exporter"]
++    B -->|HTTP health checks| Q["Nextcloud and ONLYOFFICE on QNAP"]
++    G -->|Alert notifications| E["Gmail SMTP"]
++```
++
++Docker Compose runs Grafana, Prometheus, and Blackbox Exporter on the monitoring VM. Prometheus passes each target URL and probe module to Blackbox Exporter and stores the resulting metrics. Grafana uses those metrics for the dashboard and alert rules. Its data source, dashboard, alert rules, and email contact point are loaded from files in the repository. SMTP credentials and the recipient address are supplied through a local environment file.
++
++| Service | Expected HTTP response |
++| --- | --- |
++| Nextcloud | `/status.php` returns HTTP 200 with JSON fields `installed: true`, `maintenance: false`, and `needsDbUpgrade: false`. |
++| ONLYOFFICE | `/healthcheck` returns HTTP 200 with a body of `true`. |
++
++## Review the project from another network
++
++The target addresses in `prometheus/prometheus.yml` refer to services on a private home network. To reproduce the deployment, use services reachable from your own monitoring host and substitute their URLs. The local demo below provides both expected HTTP responses without a NAS, Gmail account, or access to the original environment.
++
++### Local demo with synthetic HTTP endpoints
++
++Use a fresh clone on a Docker host with port 3000 available. In that clone's `prometheus/prometheus.yml`, replace the two target URLs with the following values. Keep the job names and modules as defined in the repository.
++
++| Job | Demo target |
++| --- | --- |
++| `nextcloud` | `http://qnap-demo-endpoints:8080/status.php` |
++| `onlyoffice` | `http://qnap-demo-endpoints:8080/healthcheck` |
++
++From the clone's root, start the base stack:
++
++```bash
++docker compose -p qnap-review -f compose/monitoring.compose.yml config -q &&
++docker compose -p qnap-review -f compose/monitoring.compose.yml up -d
++```
++
++Start the two demo endpoints on the same Compose network. Leave this terminal open while testing.
++
++```bash
++docker run --rm -i --network qnap-review_default \
++  --name qnap-demo-endpoints python:3.13-alpine python -u - <<'PY'
++import json
++from http.server import BaseHTTPRequestHandler, HTTPServer
++
++
++class HealthHandler(BaseHTTPRequestHandler):
++    def do_GET(self):
++        if self.path == "/status.php":
++            content_type = "application/json"
++            body = json.dumps({
++                "installed": True,
++                "maintenance": False,
++                "needsDbUpgrade": False,
++            }).encode()
++        elif self.path == "/healthcheck":
++            content_type = "text/plain"
++            body = b"true"
++        else:
++            self.send_error(404)
++            return
++
++        self.send_response(200)
++        self.send_header("Content-Type", content_type)
++        self.send_header("Content-Length", str(len(body)))
++        self.end_headers()
++        self.wfile.write(body)
++
++
++HTTPServer(("0.0.0.0", 8080), HealthHandler).serve_forever()
++PY
++```
++
++Open `http://127.0.0.1:3000` on the Docker host. If Docker runs on a remote VM, use the SSH tunnel in the setup guide. On a fresh Grafana instance, sign in with `admin` as the username and initial password and follow the password prompt. In **Grafana → Explore**, select **Prometheus** and run:
++
++```promql
++probe_success{job=~"nextcloud|onlyoffice"}
++```
++
++Expect two series with a value of `1` after Prometheus collects the first successful probes. To test failure detection, run `docker stop qnap-demo-endpoints` in a second terminal and rerun the query after the next scrape. Expect both series to return `0` while Blackbox Exporter remains reachable. The base stack supports these probe checks. To verify the file-provisioned dashboard, alert rules, and SMTP delivery, follow the isolated Grafana procedure in the [monitoring setup guide](monitoring.md).
++
++To stop the demo stack, first stop the demo endpoint container, then run:
++
++```bash
++docker compose -p qnap-review -f compose/monitoring.compose.yml down
++```
++
++## Diagnose an alert
++
++1. In **Grafana → Alerting → Alert rules**, open the affected rule and check the job, target URL, alert state, and recent evaluation.
++2. In **Explore**, run `probe_success{job=~"nextcloud|onlyoffice"}` and `up{job=~"nextcloud|onlyoffice"}`. Use the table below to identify the failing component.
++3. From the monitoring host, check the affected URL with `curl -i --max-time 10 '<target URL>'`. If it responds, compare the HTTP status and response body with the expected values above.
++4. Check the container status and recent logs from the repository root. Use the same Compose files and local environment settings as on deployment.
++
++```bash
++docker compose -f compose/monitoring.compose.yml ps
++docker compose -f compose/monitoring.compose.yml \
++  logs --tail=100 prometheus blackbox-exporter grafana
++```
++
++| Observation | What to check |
++| --- | --- |
++| `up = 1`, `probe_success = 0` | Prometheus can scrape the probe result. Check the target URL, application state, and reachability from the Blackbox Exporter container. |
++| `up = 0` | Prometheus cannot scrape the configured endpoint. Check Blackbox Exporter, the Compose network, and the scrape configuration. |
++| Grafana shows **No Data** or **Error** | Check the Prometheus data source, whether the job is returning samples, and the rule's evaluation details. |
++| A rule is **Firing** and email is missing | Check the rule's contact point, delivery status, Grafana logs, and SMTP configuration. |
++
++The monitoring VM runs on the QNAP. Detecting a full NAS outage requires a monitor on a separate host.
++
++## Verification evidence
++
++| Check | Observed result |
++| --- | --- |
++| Fresh Grafana instance | Loaded the dashboard, Prometheus data source, and both availability rules from version-controlled files. |
++| Live service probes | The dashboard displayed successful probes for Nextcloud and ONLYOFFICE. |
++| Email routing | Grafana loaded the `qnap-email` contact point and showed it in use by both availability rules. |
++| Automatic delivery | A temporary rule on the isolated instance evaluated `vector(0)`, entered **Firing**, and sent the expected Gmail notification. |
++
++The test used a synthetic alert condition so the live applications could stay available.
