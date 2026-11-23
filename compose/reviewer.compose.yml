@@ -1,0 +1,29 @@
+services:
+  prometheus:
+    ports:
+      - "127.0.0.1:19090:9090"
+    volumes:
+      - ../demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
+
+  grafana:
+    ports: !override
+      - "127.0.0.1:13000:3000"
+    environment:
+      GF_SERVER_ROOT_URL: http://127.0.0.1:13000
+      GF_SMTP_HOST: mailpit:1025
+      GF_SMTP_USER: ""
+      GF_SMTP_PASSWORD: ""
+      GF_SMTP_FROM_ADDRESS: grafana@example.test
+      GF_SMTP_FROM_NAME: QNAP Reviewer Demo
+      QNAP_ALERT_EMAIL: reviewer@example.test
+
+  demo-targets:
+    image: python:3.13-alpine
+    command: ["python", "-u", "/app/health_endpoints.py"]
+    volumes:
+      - ../demo/health_endpoints.py:/app/health_endpoints.py:ro,z
+
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    ports:
+      - "127.0.0.1:18025:8025"

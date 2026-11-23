@@ -1,0 +1,6 @@
+# Non-secret placeholders required while Compose parses the shared provisioning file.
+# The reviewer override uses Mailpit without credentials.
+GF_SMTP_USER=demo
+GF_SMTP_PASSWORD=demo-only
+GF_SMTP_FROM_ADDRESS=grafana@example.test
+QNAP_ALERT_EMAIL=reviewer@example.test

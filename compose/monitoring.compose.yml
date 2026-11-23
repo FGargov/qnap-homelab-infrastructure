@@ -4,22 +4,22 @@ services:
   prometheus:
     image: prom/prometheus:v3.13.5
     volumes:
-      - ../prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${QNAP_PROMETHEUS_CONFIG:-../prometheus/prometheus.yml}:/etc/prometheus/prometheus.yml:ro,z
       - prometheus-data:/prometheus
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.28.0
+    command: ["--config.file=/etc/blackbox_exporter/config.yml"]
+    volumes:
+      - ../blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro,z
 
   grafana:
     image: grafana/grafana:13.3.1
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
-      - ../grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ../grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro,z
       - grafana-data:/var/lib/grafana
-
-  blackbox-exporter:
-    image: prom/blackbox-exporter:v0.29.1
-    command: [--config.file=/etc/blackbox_exporter/config.yml]
-    volumes:
-      - ../blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
 
 volumes:
   prometheus-data:
