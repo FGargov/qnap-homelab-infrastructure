@@ -13,7 +13,7 @@ scrape_configs:
       module: [nextcloud_status]
     static_configs:
       - targets:
-          - http://10.0.0.11:8090/status.php
+          - https://nextcloud.example.test/status.php
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -28,7 +28,7 @@ scrape_configs:
       module: [onlyoffice_health]
     static_configs:
       - targets:
-          - http://10.0.0.11:8088/healthcheck
+          - https://onlyoffice.example.test/healthcheck
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

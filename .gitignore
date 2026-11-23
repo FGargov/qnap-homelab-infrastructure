@@ -1,9 +1,28 @@
+# Local inventories, environment files and credentials
+/ansible/inventory.yml
+/ansible/inventory.local.yml
+*.env
 .env
 .env.*
 !.env.example
+
+# Local development and generated files
+.venv/
+__pycache__/
+*.py[cod]
+*.zip
+
+# Local credentials and recovery data
 secrets/
+ansible/inventory/hosts.ini
+/ansible/secrets.yml
+/ansible/group_vars/local_dev.yml
+id_ed25519
+id_rsa
+*.key
+privkey*.pem
 backups/
 *.sql
 *.sql.gz
-*.key
-ansible/inventory/hosts.ini
+**/config/config.php
+config.php.original

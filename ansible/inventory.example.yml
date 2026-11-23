@@ -1,0 +1,14 @@
+---
+all:
+  children:
+    monitoring:
+      hosts:
+        rocky-monitor:
+          ansible_host: rocky-vm.example.test
+          ansible_user: operator
+          ansible_python_interpreter: /usr/bin/python3
+          monitoring_project_dir: /home/operator/projects/qnap-homelab-infrastructure
+          monitoring_smtp_env_file: /home/operator/.config/qnap-monitoring/grafana-smtp.env
+          # Set only if your existing deployment uses a different Compose project or port:
+          # monitoring_project_name: qnap-monitoring
+          # monitoring_grafana_health_url: http://127.0.0.1:3000/api/health

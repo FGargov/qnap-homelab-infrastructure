@@ -1,4 +1,4 @@
-# QNAP service monitoring
+# Monitor existing Nextcloud and ONLYOFFICE instances
 
 The Rocky Linux VM runs Prometheus, Blackbox Exporter, and Grafana with Docker Compose. Prometheus scrapes Blackbox Exporter, which sends HTTP health checks to Nextcloud and ONLYOFFICE on the QNAP. Grafana queries Prometheus for the dashboard and alert rules and sends email through SMTP.
 
@@ -11,11 +11,43 @@ A successful probe produces `probe_success = 1`. A failed probe produces `0`. Gr
 
 ## Prerequisites
 
-Run the commands from the repository root on the monitoring VM. Install Docker Engine and the Docker Compose plugin. Confirm the VM can reach the two service URLs in [prometheus/prometheus.yml](../prometheus/prometheus.yml). Update those targets if deploying on a different network.
+Run the commands from the repository root on the monitoring VM. Install Docker
+Engine and the Docker Compose plugin. Confirm the VM can reach the actual
+Nextcloud `status.php` and ONLYOFFICE `healthcheck` URLs from both the VM and
+its Docker network.
+
+The bundled [Prometheus configuration](../prometheus/prometheus.yml) contains
+`example.test` URLs. For a fresh deployment, put the actual URLs in a copy kept
+on the VM outside the checkout:
+
+```bash
+install -d -m 700 "$HOME/.config/qnap-monitoring"
+cp -n prometheus/prometheus.yml "$HOME/.config/qnap-monitoring/prometheus.yml"
+chmod 644 "$HOME/.config/qnap-monitoring/prometheus.yml"
+nano "$HOME/.config/qnap-monitoring/prometheus.yml"
+```
+
+Set `QNAP_PROMETHEUS_CONFIG` in the VM's SMTP environment file to the
+**absolute path** of the copied YAML. Prometheus reads the file as its
+container user, so the mounted file must be readable inside the container.
+If your running stack already uses a working repository configuration, you can
+leave this variable unset and keep those working URLs.
 
 ## Configure email
 
-The Grafana provisioning override uses an environment file outside the Git repository. If you already configured Gmail for this stack, add `QNAP_ALERT_EMAIL` to that file. For a fresh setup, save the following example to `~/.config/qnap-monitoring/grafana-smtp.env` and replace the placeholder values. Set file permissions to `600`.
+The Grafana provisioning override reads an environment file on the VM. If you
+already configured Gmail for this stack, open that file and add
+`QNAP_ALERT_EMAIL`. For a fresh setup, create a private file and open it:
+
+```bash
+install -d -m 700 "$HOME/.config/qnap-monitoring"
+smtp_env="$HOME/.config/qnap-monitoring/grafana-smtp.env"
+(umask 077 && touch "$smtp_env")
+chmod 600 "$smtp_env"
+nano "$smtp_env"
+```
+
+Use the following settings with your actual values.
 
 ```dotenv
 GF_SMTP_HOST=smtp.gmail.com:465
@@ -24,6 +56,8 @@ GF_SMTP_PASSWORD=REPLACE_WITH_APP_PASSWORD
 GF_SMTP_FROM_ADDRESS=sender@example.com
 GF_SMTP_FROM_NAME=QNAP Grafana
 QNAP_ALERT_EMAIL=recipient@example.com
+# For live targets kept outside the checkout, uncomment and set the actual VM path.
+# QNAP_PROMETHEUS_CONFIG=/home/operator/.config/qnap-monitoring/prometheus.yml
 ```
 
 For Gmail, use the sender's full Gmail address and a Google App Password. The recipient can use the same address. Keep the SMTP environment file on the VM.

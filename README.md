@@ -1,41 +1,64 @@
 # QNAP Homelab Infrastructure
 
-This project documents how I recover and monitor services in my homelab on a QNAP TS-473A. It covers a verified recovery exercise for Nextcloud and MariaDB, including file checks against an HBS 3 restore, and a reproducible monitoring stack for Nextcloud and ONLYOFFICE.
+This project documents the recovery of Nextcloud and MariaDB and provides a reproducible monitoring stack for Nextcloud and ONLYOFFICE. The live deployment runs on a QNAP TS-473A with a Rocky Linux VM hosting the monitoring services.
 
-## What the project covers
+## Project workflows
 
-### Disaster recovery
+| Task | Guide |
+| --- | --- |
+| Run the local monitoring demo | Follow the [quick start](#local-demo). You need Docker, Compose 2.24.4 or newer, Bash, and Python 3. |
+| Monitor existing Nextcloud and ONLYOFFICE instances | [Prepare the monitoring VM](docs/monitoring.md#prerequisites), then deploy with [Docker Compose](docs/monitoring.md) or [Ansible over SSH](docs/monitoring-deployment.md). |
+| Review the backup restore | Read the [recorded recovery exercise](docs/disaster-recovery.md#recorded-exercise) for the database, HTTP, and file checksum results. Repeating it requires a compatible backup and an isolated recovery environment. |
+
+## Local demo
+
+1. Open a terminal in the project directory containing this README.
+
+2. Start the demo containers.
+
+   ```bash
+   ./demo/reviewer.sh up
+   ```
+
+   The script runs Docker Compose with the base monitoring config, the Grafana provisioning config, and a demo override. The override points Prometheus at a small Python service that mimics the Nextcloud `/status.php` and ONLYOFFICE `/healthcheck` responses. The actual Nextcloud and ONLYOFFICE applications are external to this demo.
+
+3. Open Grafana at [127.0.0.1:13000](http://127.0.0.1:13000) and the local Mailpit inbox at [127.0.0.1:18025](http://127.0.0.1:18025) on the Docker host. On first use, sign in to Grafana with `admin` / `admin` and follow the password prompt.
+
+4. Start the smoke test in a terminal.
+
+   ```bash
+   ./demo/reviewer.sh test
+   ```
+
+   The test starts with healthy responses, changes both responses to simulate a failure, and then restores them. It checks each probe's `1 → 0 → 1` transition and looks for **FIRING** and **RESOLVED** notifications for both rules in Mailpit. Allow several minutes for the Grafana evaluation and notification intervals.
+
+5. Stop the demo containers.
+
+   ```bash
+   ./demo/reviewer.sh down
+   ```
+
+Run the script commands with `sudo` if your Docker host requires it. See the [reviewer demo guide](docs/reviewer-demo.md) for the expected results and the separate real-document check.
+
+## Monitor live applications on Rocky Linux
+
+1. Start with a running Rocky Linux VM with Docker and the Compose plugin.
+2. Confirm the VM can reach an existing Nextcloud instance and ONLYOFFICE Document Server. Configure their health URLs using the [monitoring setup guide](docs/monitoring.md#prerequisites).
+3. Create the [local SMTP environment file](docs/monitoring.md#configure-email). Choose [Docker Compose on the VM](docs/monitoring.md#start-with-a-clean-grafana-database) or [Ansible over SSH](docs/monitoring-deployment.md) to deploy the stack.
+4. Open Grafana through the SSH tunnel. Check that both live jobs report `probe_success = 1`. For a separate application-level check, edit, save, and reopen a disposable document in Nextcloud using ONLYOFFICE.
+
+Grafana loads the Prometheus data source, dashboard, alert rules, and email contact point from configuration committed to Git. On the homelab, I verified that the dashboard and rules loaded on an isolated Grafana instance and that a temporary test rule delivered an email to Gmail.
+
+## Disaster recovery results
 
 - Restored Nextcloud 34.0.5 and MariaDB in isolated Docker containers.
 - Confirmed that the restored Nextcloud instance responded over HTTP.
-- Verified 82 user files by comparing the working copy with the HBS 3 restore using rsync checksums.
+- Compared 82 user files from the working copy and the HBS 3 restore using rsync checksums.
 
-### Monitoring and alerting
+See the [disaster recovery guide](docs/disaster-recovery.md) for the procedure and validation evidence.
 
-Docker Compose runs the monitoring stack on a Rocky Linux VM. Blackbox Exporter checks the Nextcloud status endpoint and the ONLYOFFICE health endpoint. Prometheus collects the probe results, and Grafana displays service availability and evaluates alert rules.
+## Operations
 
-Grafana loads its Prometheus data source, dashboard, alert rules, and email contact point from version-controlled configuration. I verified the dashboard and rules on a clean Grafana instance and confirmed that a test alert reached Gmail through SMTP.
-
-## Repository layout
-
-| Path | Contents |
-| --- | --- |
-| `compose/` | Docker Compose definitions for the monitoring stack and Grafana provisioning |
-| `prometheus/` | Scrape configuration and monitored targets |
-| `blackbox/` | HTTP health-check modules for Nextcloud and ONLYOFFICE |
-| `grafana/` | Dashboard JSON and provisioning for the data source, dashboard, and alerting |
-| `docs/` | Recovery and monitoring guides |
-
-## Getting started
-
-The monitoring stack requires Docker Engine, the Docker Compose plugin, and network access from the monitoring host to both service endpoints. Set the target URLs for your environment in `prometheus/prometheus.yml`. Store SMTP credentials and the alert recipient in a local environment file outside Git. Grafana is bound to the monitoring host's loopback interface and can be accessed remotely through an SSH tunnel.
-
-## Documentation
-
-- [Disaster recovery guide](docs/disaster-recovery.md) — Nextcloud and MariaDB restore procedure and verification results.
-- [Monitoring guide](docs/monitoring.md) — Docker Compose setup, Grafana provisioning, SMTP settings, and validation on a separate instance.
-- [Monitoring runbook](docs/monitoring-runbook.md) — Architecture, local reviewer demo, troubleshooting, and verification evidence.
-
-## Next step
-
-Automate monitoring deployment with Ansible roles.
+- [Monitoring runbook](docs/monitoring-runbook.md) — Architecture, triage, recovery, and evidence.
+- [Monitoring setup](docs/monitoring.md) — Compose, Grafana, SMTP, and isolated verification against live targets.
+- [Ansible deployment](docs/monitoring-deployment.md) — SSH inventory, preflight, deployment, verification, and rollback.

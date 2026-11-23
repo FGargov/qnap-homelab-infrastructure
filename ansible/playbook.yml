@@ -1,0 +1,123 @@
+---
+- name: Deploy QNAP monitoring on a Docker host
+  hosts: monitoring
+  become: true
+  gather_facts: false
+  vars:
+    monitoring_project_name: qnap-monitoring
+    monitoring_recreate: false
+    monitoring_compose_dir: "{{ monitoring_project_dir }}/compose"
+    monitoring_compose_files:
+      - monitoring.compose.yml
+      - grafana-provisioning.compose.yml
+    monitoring_grafana_health_url: http://127.0.0.1:3000/api/health
+
+  pre_tasks:
+    - name: Validate the deployment settings
+      ansible.builtin.assert:
+        that:
+          - (monitoring_project_dir | default('')) is match('^/')
+          - (monitoring_smtp_env_file | default('')) is match('^/')
+          - monitoring_project_name is match('^[a-z0-9][a-z0-9_-]*$')
+          - (monitoring_recreate | string | lower) in ['true', 'false']
+        fail_msg: >-
+          Set absolute project and SMTP file paths on the VM, a valid Compose
+          project name, and a boolean monitoring_recreate.
+      tags: [preflight]
+
+    - name: Check files on the Docker host
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: true
+        get_checksum: false
+        get_mime: false
+        get_attributes: false
+      loop: >-
+        {{
+          (monitoring_compose_files | map('regex_replace', '^', monitoring_compose_dir ~ '/') | list)
+          + [monitoring_smtp_env_file]
+        }}
+      register: monitoring_input_files
+      tags: [preflight]
+
+    - name: Require all deployment inputs to exist
+      ansible.builtin.assert:
+        that: item.stat.isreg | default(false)
+        fail_msg: "File missing on the VM: {{ item.item }}"
+        quiet: true
+      loop: "{{ monitoring_input_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags: [preflight]
+
+    - name: Require a private SMTP environment file
+      ansible.builtin.assert:
+        that: monitoring_input_files.results[-1].stat.mode in ['0400', '0600']
+        fail_msg: "Set the VM's SMTP environment file to mode 600 or 400."
+      tags: [preflight]
+
+    - name: Confirm Docker is accessible with privilege escalation
+      ansible.builtin.command:
+        argv: [docker, version]
+      check_mode: false
+      changed_when: false
+      tags: [preflight]
+
+    - name: Check the merged Compose configuration
+      block:
+        - name: Validate Compose inputs without exposing the environment
+          ansible.builtin.command:
+            chdir: "{{ monitoring_compose_dir }}"
+            argv:
+              - docker
+              - compose
+              - --project-directory
+              - "{{ monitoring_compose_dir }}"
+              - --project-name
+              - "{{ monitoring_project_name }}"
+              - --env-file
+              - "{{ monitoring_smtp_env_file }}"
+              - -f
+              - "{{ monitoring_compose_files[0] }}"
+              - -f
+              - "{{ monitoring_compose_files[1] }}"
+              - config
+              - --quiet
+          no_log: true
+          check_mode: false
+          changed_when: false
+      rescue:
+        - name: Report the Compose validation failure
+          ansible.builtin.fail:
+            msg: >-
+              Compose validation failed. Check the Compose plugin and SMTP variables
+              on the VM, then run the config --quiet command from
+              docs/monitoring-deployment.md locally on the VM.
+      tags: [preflight]
+
+  tasks:
+    - name: Apply the monitoring Compose project
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_compose_dir }}"
+        project_name: "{{ monitoring_project_name }}"
+        files: "{{ monitoring_compose_files }}"
+        env_files:
+          - "{{ monitoring_smtp_env_file }}"
+        state: present
+        recreate: "{{ 'always' if monitoring_recreate | bool else 'auto' }}"
+        wait: true
+        wait_timeout: 120
+
+    - name: Wait for Grafana and its database
+      ansible.builtin.uri:
+        url: "{{ monitoring_grafana_health_url }}"
+        use_proxy: false
+        follow_redirects: none
+        timeout: 5
+      register: grafana_health
+      until:
+        - grafana_health.status | default(-1) == 200
+        - (grafana_health.json | default({})).get('database') == 'ok'
+      retries: 15
+      delay: 4
+      when: not ansible_check_mode
