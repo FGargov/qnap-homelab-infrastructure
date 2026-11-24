@@ -111,3 +111,6 @@ sudo docker compose --env-file "$smtp_env" "${compose_files[@]}"   -p qnap-monit
 ```
 
 The verification volumes are retained. Run a future clean verification under a new project name if you need a blank database again.
+
+To pause the live stack or stop an existing test project while keeping its
+containers, follow [Stop and resume monitoring](monitoring-runbook.md#stop-and-resume-monitoring).

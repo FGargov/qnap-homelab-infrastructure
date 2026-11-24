@@ -136,6 +136,9 @@ Expect a result of `1` for each healthy service. The playbook checks Grafana
 startup even when an application is unavailable. Check both probe results
 and the alert rules to confirm the monitoring targets separately.
 
+After testing, follow [Stop and resume monitoring](monitoring-runbook.md#stop-and-resume-monitoring)
+to pause the stack or bring it back online later.
+
 ## Reapply changes or roll back
 
 Run the same playbook after updating the checkout or SMTP environment. Compose
