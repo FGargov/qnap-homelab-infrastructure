@@ -36,47 +36,6 @@ flowchart TD
 
 The VM and applications share the physical NAS. A full NAS outage can take the monitoring stack offline with the services. To detect an outage at that boundary, the check needs to run from another host.
 
-## Stop and resume monitoring
-
-On the Rocky VM, list the Compose projects, including stopped ones. Use the
-project names from the output if they differ from the examples below.
-
-```bash
-sudo docker compose ls --all
-```
-
-After an isolated test, stop its containers. For continuous monitoring, keep
-the main project running.
-
-```bash
-sudo docker ps -q --filter 'label=com.docker.compose.project=qnap-monitoring-v1-check' | xargs -r sudo docker stop
-```
-
-To pause live monitoring too, stop the main project. Nextcloud and ONLYOFFICE
-continue running on the NAS. Metric collection and alert evaluation on the VM
-pause until you start monitoring again.
-
-```bash
-sudo docker ps -q --filter 'label=com.docker.compose.project=qnap-monitoring' | xargs -r sudo docker stop
-sudo docker compose ls --all
-```
-
-Look for `exited` on each project you stopped. The named volumes retain the
-Grafana database and Prometheus history. On the Ubuntu workstation, press
-**Ctrl+C** in the terminal running the SSH tunnel to close it.
-
-To resume the main project on Rocky, start its existing containers. Once
-Grafana has started, check that its health response reports `"database": "ok"`.
-
-```bash
-sudo docker ps -aq --filter 'label=com.docker.compose.project=qnap-monitoring' | xargs -r sudo docker start
-sudo docker compose ls --all
-curl -fsS http://127.0.0.1:3000/api/health
-```
-
-Reopen the [SSH tunnel](monitoring.md#start-with-a-clean-grafana-database) on
-the workstation when you want to view Grafana again.
-
 ## Triage
 
 1. Record the timestamp, affected service, Grafana rule state, endpoint, and user-visible symptom.
@@ -175,3 +134,44 @@ monitoring=(
 For each incident or drill, record the commit, environment, UTC timestamps for detection and validation, commands, expected and actual results, and follow-up actions. Record RTO from the agreed start time to validated recovery. Measure RPO against the verified recovery point for data restores. The evidence above does not establish an RTO or RPO for the live homelab.
 
 The recovery procedure and evidence fields were informed by the [SteadyOps disaster recovery template](https://github.com/steadyops-best/disaster-recovery-runbook-template).
+
+## Stop and resume monitoring
+
+On the Rocky VM, list the Compose projects, including stopped ones. Use the
+project names from the output if they differ from the examples below.
+
+```bash
+sudo docker compose ls --all
+```
+
+After an isolated test, stop its containers. For continuous monitoring, keep
+the main project running.
+
+```bash
+sudo docker ps -q --filter 'label=com.docker.compose.project=qnap-monitoring-v1-check' | xargs -r sudo docker stop
+```
+
+To pause live monitoring too, stop the main project. Nextcloud and ONLYOFFICE
+continue running on the NAS. Metric collection and alert evaluation on the VM
+pause until you start monitoring again.
+
+```bash
+sudo docker ps -q --filter 'label=com.docker.compose.project=qnap-monitoring' | xargs -r sudo docker stop
+sudo docker compose ls --all
+```
+
+Look for `exited` on each project you stopped. The named volumes retain the
+Grafana database and Prometheus history. On the Ubuntu workstation, press
+**Ctrl+C** in the terminal running the SSH tunnel to close it.
+
+To resume the main project on Rocky, start its existing containers. Once
+Grafana has started, check that its health response reports `"database": "ok"`.
+
+```bash
+sudo docker ps -aq --filter 'label=com.docker.compose.project=qnap-monitoring' | xargs -r sudo docker start
+sudo docker compose ls --all
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+Reopen the [SSH tunnel](monitoring.md#start-with-a-clean-grafana-database) on
+the workstation when you want to view Grafana again.
